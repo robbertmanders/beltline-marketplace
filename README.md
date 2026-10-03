@@ -14,7 +14,7 @@ Every package version has a manifest at `packages/<package>/v<n>/package.json`. 
 
 An optional `packages/<package>/v<n>/README.md` may sit beside it. The file is UTF-8 Markdown and is shown in the preview.
 
-`package.json` has exactly these keys:
+`package.json` has exactly these seven keys, and no others:
 
 - `schemaVersion`: the integer `1`
 - `id`: a string, the same as the `<package>` folder name

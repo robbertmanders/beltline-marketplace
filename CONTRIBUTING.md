@@ -2,7 +2,7 @@
 
 Packages in this repository follow the format in [README.md](README.md): the [manifest](README.md#manifest), the [layouts](README.md#layouts) for a factory, a belt and an agent, and the [stripping rules](README.md#what-a-shared-package-keeps).
 
-A package is published only when a pull request has been reviewed and merged. Pushing to the default branch does not publish a package. The default branch is currently `main`. Existing versions stay as they were merged; a change is a new `packages/<id>/v<n>/` directory.
+A package is published only when a pull request has been reviewed and merged. Do not push commits directly to the default branch. The default branch is currently `main`. Existing versions stay as they were merged; a change is a new `packages/<id>/v<n>/` directory.
 
 Share… in the app is planned. It is not part of this repository, and these documents do not add it. Until it is available, prepare the package by hand.
 
@@ -25,7 +25,7 @@ The pull request is the proposal. It is public only after it is reviewed and mer
 4. Strip the belt settings the same way the app would. In every belt version, including every version inside a factory, set `repos` to `[]`, `base` to `""` and `afkEnabled` to `false`. In a factory package, set each belt's `state.json` `paused` flag to `true` and keep its `archived` flag.
 5. Open a pull request against the marketplace's default branch, currently `main`.
 
-Opening that pull request is how a hand-written package is proposed. Pushing the commits straight to `main` is not a way to publish.
+Opening that pull request is how a hand-written package is proposed. Do not push those commits straight to `main`.
 
 ## Reviewer checks
 

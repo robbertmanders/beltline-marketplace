@@ -1,0 +1,11 @@
+{
+  "author" : "robbertmanders",
+  "id" : "pr-review",
+  "kind" : "belt",
+  "name" : "PR Review",
+  "schemaVersion" : 1,
+  "summary" : "A PR Review workflow",
+  "tags" : [
+
+  ]
+}

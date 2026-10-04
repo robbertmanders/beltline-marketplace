@@ -45,12 +45,18 @@ FACTORY_KEYS = ["schemaVersion", "id", "name"]
 
 GITHUB_TOKEN = re.compile(r"(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_)[A-Za-z0-9_]{8,}")
 PRIVATE_KEY = re.compile(r"-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----")
-# One non-space character is enough to warn. Redaction uses a wider pattern.
+# One non-space character is enough to warn. Redaction hides more than that.
 SECRET_ASSIGNMENT = re.compile(r'(?i)(?:"|\b)(?:token|password|secret)(?:"|\b)[ \t]*[=:][ \t]*\S')
 PERSONAL_PATH = re.compile(r"(?:/Users/|/home/|[A-Za-z]:[\\/]+Users[\\/])")
-# Whole assigned value: a quoted value, or an unquoted value through the next space.
+# From the assignment keyword through the end of the diagnostic. A quoted value
+# can contain an escaped quote; keeping the rest of the message is not worth a leak.
 ASSIGNMENT_REDACTION = re.compile(
-    r'(?i)(?:"|\b)(?:token|password|secret)(?:"|\b)[ \t]*[=:][ \t]*(?:"[^"]*"|\'[^\']*\'|\S+)'
+    r'(?i)(?:"|\b)(?:token|password|secret)(?:"|\b)[ \t]*[=:][\s\S]*'
+)
+# Through the end of the non-whitespace token, so a hyphen or other punctuation
+# after the recognised prefix cannot survive.
+GITHUB_TOKEN_REDACTION = re.compile(
+    r"(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_)[A-Za-z0-9_]{8,}\S*"
 )
 
 WARNINGS = (
@@ -60,12 +66,11 @@ WARNINGS = (
     ("personal-path", PERSONAL_PATH, "Possible personal path; review before merging"),
 )
 
-# Wider than the warning detectors so a blocking message cannot keep the rest of a
-# matched token, key block, assignment or personal path. Token redaction already
-# takes the full [A-Za-z0-9_] run, a private-key header takes the rest of the
-# message, and a personal path takes the rest of that non-space token.
+# Wider than the warning detectors. An assignment or a private-key header drops
+# the rest of the diagnostic. A token prefix drops the rest of that non-whitespace
+# token. A personal path drops the rest of that non-space token.
 REDACTIONS = (
-    GITHUB_TOKEN,
+    GITHUB_TOKEN_REDACTION,
     re.compile(r"-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----[\s\S]*"),
     ASSIGNMENT_REDACTION,
     re.compile(r"(?:/Users/|/home/|[A-Za-z]:[\\/]+Users[\\/])\S*"),

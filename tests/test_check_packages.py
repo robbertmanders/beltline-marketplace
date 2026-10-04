@@ -686,6 +686,76 @@ class WarningTests(unittest.TestCase):
         self.assertNotIn("secret value", redacted_space)
         self.assertIn("[redacted]", redacted_space)
 
+    def test_secret_tails_stay_out_of_annotations_and_cli_output(self) -> None:
+        marker = "SECRET-TAIL"
+        cases = {
+            "password=": f"password=x{marker}",
+            'password=""': f'password="x{marker}"',
+            "token:": f"token:x{marker}",
+            'token:""': f'token:"x{marker}"',
+            "secret = ": f"secret = x{marker}",
+            'secret = ""': f'secret = "x{marker}"',
+            "quoted space": f'password="x {marker}"',
+            "escaped quote": 'password="x\\"' + marker + '"',
+            "single quoted embedded double": f"password='x\"{marker}'",
+            "hyphenated token": f"ghp_12345678-{marker}",
+            "punctuated token": f"github_pat_12345678.{marker}",
+        }
+        for name, secret in cases.items():
+            with self.subTest(name=name):
+                direct = check_packages.redact_sensitive(f'unknown kind "{secret}"')
+                self.assert_secret_tail_hidden(direct, secret)
+                self.assertIn("[redacted]", direct)
+                self.assertIn("unknown kind", direct)
+
+                document = manifest("sample", "belt", "Sample", "Ships.")
+                document["kind"] = secret
+                files = belt_package("sample")
+                files["packages/sample/v1/package.json"] = dumps(document)
+                found = check(files)
+                output = rendered(found)
+                self.assert_secret_tail_hidden(output, secret)
+                self.assertIn("unknown kind", output)
+                self.assertIn("[redacted]", output)
+                self.assertTrue(any(item.severity == "warning" for item in found))
+                self.assertEqual(check_packages.exit_code(found), 1)
+                for line in output.splitlines():
+                    for _category, pattern, _message in check_packages.WARNINGS:
+                        self.assertIsNone(pattern.search(line))
+
+                repo = Repo(self)
+                repo.write("packages/.gitkeep", b"")
+                base = repo.commit("placeholder")
+                payload = {
+                    "schemaVersion": 1,
+                    "id": "sample",
+                    "name": "Sample",
+                    "kind": secret,
+                    "summary": "Ships.",
+                    "author": "octocat",
+                    "tags": [],
+                }
+                repo.write(
+                    "packages/sample/v1/package.json",
+                    (json.dumps(payload, separators=(",", ":")) + "\n").encode(),
+                )
+                repo.commit("secret tail")
+                result = run_check(repo, base)
+                self.assertNotEqual(result.returncode, 0)
+                self.assert_secret_tail_hidden(result.stdout, secret)
+                self.assert_secret_tail_hidden(result.stderr, secret)
+                self.assertIn("[redacted]", result.stdout)
+                self.assertIn("unknown kind", result.stdout)
+
+    def assert_secret_tail_hidden(self, text: str, secret: str) -> None:
+        """No fragment of the secret value after its first character may remain."""
+        self.assertNotIn("SECRET-TAIL", text)
+        for index in range(1, len(secret)):
+            fragment = secret[index:]
+            if len(fragment) < 8:
+                continue
+            self.assertNotIn(fragment, text)
+
     def test_unknown_kind_secret_is_redacted_on_the_cli(self) -> None:
         secret = "ghp_12345678SECRET"
         repo = Repo(self)
@@ -710,9 +780,11 @@ class WarningTests(unittest.TestCase):
         combined = result.stdout + result.stderr
         self.assertNotIn(secret, combined)
         self.assertIn(
-            '::error file=packages/sample/v1/package.json,line=1::unknown kind "[redacted]"',
+            '::error file=packages/sample/v1/package.json,line=1::unknown kind "[redacted]',
             result.stdout,
         )
+        self.assertNotIn("2345678SECRET", result.stdout)
+        self.assertNotIn("2345678SECRET", result.stderr)
         self.assertIn(
             "::warning file=packages/sample/v1/package.json,line=1::Possible GitHub token; review before merging",
             result.stdout,

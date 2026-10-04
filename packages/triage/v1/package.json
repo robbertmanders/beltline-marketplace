@@ -1,0 +1,11 @@
+{
+  "author" : "robbertmanders",
+  "id" : "triage",
+  "kind" : "agent",
+  "name" : "Triage",
+  "schemaVersion" : 1,
+  "summary" : "Sorts a new issue into a clear implementation path.",
+  "tags" : [
+    "built-in"
+  ]
+}

@@ -1,10 +1,12 @@
 # Beltline marketplace
 
-This repository is the public marketplace for sharing Beltline factories, belts and agents. The planned Market page is where people browse those packages, preview one, and import it. Publication is moderated through pull requests: a package is proposed in a pull request, and it is shared when that pull request is reviewed and merged.
+This repository is the public marketplace for sharing Beltline factories, belts and agents. In Beltline, Market lets you browse packages, preview a release and import it. Search covers package name, summary, author and tags; filters show All, Factory, Belt or Agent packages, and Refresh updates the catalog. Select a package to choose a release and inspect its README, belt machines, factory floor, agent briefs and outcomes, plus any warnings, blocking problems and import effects. Each package you already have is marked Installed v<n>, and each package with a newer release is marked Update v<n>. An Updates filter narrows the list to those updates and shows how many there are. Browsing and previewing do not change your library.
 
-The Market page and Share… are planned. This documentation describes that workflow and the package format. It does not add either feature to the app.
+Importing a factory package replaces the belts and agents in your library, and updating a factory package does the same: runs and settings remain, and unexported library changes are lost. Importing a belt or agent package keeps existing library items and adds the package beside them, reusing matching agent versions. The preview shows any belt, agent identity or key adjustments. Imported belts are paused, have no repositories, an empty base branch and AFK off. You confirm the import after reviewing its effects. Model warnings alone do not prevent import; blocking problems do. If the library or model allowances change after review, Beltline shows updated effects and asks you to review and confirm again. **Import as a new copy** adds a second copy beside what you have instead of updating what you installed.
 
-Importing a factory package replaces the belts and agents in your library. Importing a belt or agent package adds it to the library beside what you already have.
+**Update to v<n>** saves the package's agents as new versions of the agents you installed and the belt as its next version. Repositories, base branch, AFK and paused state stay. Earlier versions stay, and runs keep the versions they started with.
+
+Market uses `robbertmanders/beltline-marketplace` by default. The Marketplace repository is set in Settings as `owner/repository`. Leave empty to hide the Market list. This setting applies to browsing and proposals; it is separate from `factoryRepository`.
 
 Your own factory repository, and Settings → Factories, keep the archive format they already use. A personal factory backup lives under `factories/<id>/v<n>/` and still contains that setup's repositories and base branches. Marketplace packages live under `packages/<package>/v<n>/` and are prepared for someone else, as described below.
 
@@ -12,7 +14,7 @@ Your own factory repository, and Settings → Factories, keep the archive format
 
 Every package version has a manifest at `packages/<package>/v<n>/package.json`. The same file is used for a factory, a belt and an agent.
 
-An optional `packages/<package>/v<n>/README.md` may sit beside it. The file is UTF-8 Markdown and is shown in the preview.
+An optional `packages/<package>/v<n>/README.md` may sit beside it. The file is UTF-8 Markdown, is limited to 65,536 UTF-8 bytes (64 KB), and is shown in the preview.
 
 `package.json` has exactly these seven keys, and no others:
 

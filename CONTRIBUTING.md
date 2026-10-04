@@ -2,7 +2,7 @@
 
 Packages in this repository follow the format in [README.md](README.md): the [manifest](README.md#manifest), the [layouts](README.md#layouts) for a factory, a belt and an agent, and the [stripping rules](README.md#what-a-shared-package-keeps).
 
-A package is published only when a pull request has been reviewed and merged. A public proposal may already be visible before publication. Do not push commits directly to the default branch. This repository's default branch is currently `main`. Existing versions stay as they were merged; a change is a new `packages/<id>/v<n>/` directory.
+A package is published only when a pull request has been reviewed and merged. A public proposal may already be visible before publication. Do not push commits directly to the default branch. This repository's default branch is currently `main`. Existing versions stay as they were merged; a change is a new `packages/<id>/v<n>/` directory. A new `packages/<id>/v<n>/` directory is what people's apps offer as an update, so keep the same package id and kind and describe the change in that version's README.
 
 ## Share from the app
 

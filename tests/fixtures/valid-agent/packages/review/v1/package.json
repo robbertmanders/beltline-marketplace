@@ -1,0 +1,9 @@
+{
+  "author": "octocat",
+  "id": "review",
+  "kind": "agent",
+  "name": "Review",
+  "schemaVersion": 1,
+  "summary": "Review a pull request.",
+  "tags": []
+}

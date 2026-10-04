@@ -98,7 +98,7 @@ packages/review/v1/agents/review/v4.md
 
 ### Factory
 
-A factory package contains `factory.json`, every saved belt version, and every saved agent version. `belts/<id>/state.json` and `agents/<id>/state.json` are optional flag files. The archive contains at least one agent. Every pin in every belt version, including older versions, resolves to an agent file in the package: a belt that once pinned `agents/triage/v1.md` still needs that file when a later belt version pins `agents/triage/v2.md`.
+A factory package contains `factory.json`, every saved belt version, and every saved agent version. Every factory belt requires state.json with paused:true and a boolean archived. Agent state.json remains optional and may contain only a boolean archived. The archive contains at least one agent. Every pin in every belt version, including older versions, resolves to an agent file in the package: a belt that once pinned `agents/triage/v1.md` still needs that file when a later belt version pins `agents/triage/v2.md`.
 
 `state.json` and `factory.json` belong only in a factory package. Any other payload path is unsupported.
 
@@ -126,7 +126,7 @@ packages/team-setup/v2/agents/build/state.json
 }
 ```
 
-A belt flag file carries `paused` and `archived`. An agent flag file carries `archived`.
+Every factory belt requires `belts/<id>/state.json` with `paused: true` and a boolean `archived`. An archived belt must still be paused. Agent `agents/<id>/state.json` remains optional and may contain only a boolean `archived`.
 
 ## Identities and versions
 
@@ -155,7 +155,7 @@ Every shared belt version, including every belt version inside a factory, is sto
 - `base` = `""`
 - `afkEnabled` = `false`
 
-Imported belts arrive paused, so the recipient can set repositories before enabling the belt. In a factory package each belt's `state.json` sets `paused` to `true` and keeps that belt's `archived` flag.
+Imported belts arrive paused, so the recipient can set repositories before enabling the belt. In a factory package every belt's `state.json` sets `paused` to `true` and includes a boolean `archived`. An archived belt must still be paused. Agent `state.json` remains optional and may contain only a boolean `archived`.
 
 The package keeps triggers and their filters, policies, stages, forks, briefs and model choices.
 

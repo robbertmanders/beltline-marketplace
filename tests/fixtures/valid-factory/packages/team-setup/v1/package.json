@@ -1,0 +1,11 @@
+{
+  "author": "octocat",
+  "id": "team-setup",
+  "kind": "factory",
+  "name": "Team setup",
+  "schemaVersion": 1,
+  "summary": "The belts and agents used for issue work.",
+  "tags": [
+    "team"
+  ]
+}

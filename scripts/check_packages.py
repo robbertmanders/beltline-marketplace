@@ -45,8 +45,13 @@ FACTORY_KEYS = ["schemaVersion", "id", "name"]
 
 GITHUB_TOKEN = re.compile(r"(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_)[A-Za-z0-9_]{8,}")
 PRIVATE_KEY = re.compile(r"-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----")
+# One non-space character is enough to warn. Redaction uses a wider pattern.
 SECRET_ASSIGNMENT = re.compile(r'(?i)(?:"|\b)(?:token|password|secret)(?:"|\b)[ \t]*[=:][ \t]*\S')
 PERSONAL_PATH = re.compile(r"(?:/Users/|/home/|[A-Za-z]:[\\/]+Users[\\/])")
+# Whole assigned value: a quoted value, or an unquoted value through the next space.
+ASSIGNMENT_REDACTION = re.compile(
+    r'(?i)(?:"|\b)(?:token|password|secret)(?:"|\b)[ \t]*[=:][ \t]*(?:"[^"]*"|\'[^\']*\'|\S+)'
+)
 
 WARNINGS = (
     ("github-token", GITHUB_TOKEN, "Possible GitHub token; review before merging"),
@@ -56,11 +61,13 @@ WARNINGS = (
 )
 
 # Wider than the warning detectors so a blocking message cannot keep the rest of a
-# matched token, key block, assignment or personal path.
+# matched token, key block, assignment or personal path. Token redaction already
+# takes the full [A-Za-z0-9_] run, a private-key header takes the rest of the
+# message, and a personal path takes the rest of that non-space token.
 REDACTIONS = (
     GITHUB_TOKEN,
     re.compile(r"-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----[\s\S]*"),
-    SECRET_ASSIGNMENT,
+    ASSIGNMENT_REDACTION,
     re.compile(r"(?:/Users/|/home/|[A-Za-z]:[\\/]+Users[\\/])\S*"),
 )
 

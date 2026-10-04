@@ -618,6 +618,74 @@ class WarningTests(unittest.TestCase):
             for _category, pattern, _message in check_packages.WARNINGS:
                 self.assertIsNone(pattern.search(line))
 
+    def test_assignment_values_are_fully_redacted(self) -> None:
+        value = "sentinel-secret-value"
+        tail = "entinel"
+        forms = {
+            "password=": f"password={value}",
+            'password=""': f'password="{value}"',
+            "token:": f"token:{value}",
+            'token:""': f'token:"{value}"',
+            "secret = ": f"secret = {value}",
+            'secret = ""': f'secret = "{value}"',
+        }
+        for name, secret in forms.items():
+            with self.subTest(name=name):
+                direct = check_packages.redact_sensitive(f'unknown key "{secret}"')
+                self.assertNotIn(value, direct)
+                self.assertNotIn(tail, direct)
+                self.assertIn("[redacted]", direct)
+
+                document = manifest("sample", "belt", "Sample", "Ships.")
+                document["kind"] = secret
+                files = belt_package("sample")
+                files["packages/sample/v1/package.json"] = dumps(document)
+                found = check(files)
+                output = rendered(found)
+                self.assertNotIn(value, output)
+                self.assertNotIn(tail, output)
+                self.assertIn("unknown kind", output)
+                self.assertIn("[redacted]", output)
+                self.assertTrue(any(item.severity == "warning" for item in found))
+                self.assertEqual(check_packages.exit_code(found), 1)
+                for line in output.splitlines():
+                    for _category, pattern, _message in check_packages.WARNINGS:
+                        self.assertIsNone(pattern.search(line))
+
+                repo = Repo(self)
+                repo.write("packages/.gitkeep", b"")
+                base = repo.commit("placeholder")
+                payload = {
+                    "schemaVersion": 1,
+                    "id": "sample",
+                    "name": "Sample",
+                    "kind": secret,
+                    "summary": "Ships.",
+                    "author": "octocat",
+                    "tags": [],
+                }
+                repo.write(
+                    "packages/sample/v1/package.json",
+                    (json.dumps(payload, separators=(",", ":")) + "\n").encode(),
+                )
+                repo.commit("secret assignment")
+                result = run_check(repo, base)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn(value, result.stdout)
+                self.assertNotIn(value, result.stderr)
+                self.assertNotIn(tail, result.stdout)
+                self.assertNotIn(tail, result.stderr)
+                self.assertIn("[redacted]", result.stdout)
+                self.assertIn("unknown kind", result.stdout)
+
+        spaced = "sentinel secret value"
+        quoted_space = f'password="{spaced}"'
+        redacted_space = check_packages.redact_sensitive(f'unknown key "{quoted_space}"')
+        self.assertNotIn("sentinel", redacted_space)
+        self.assertNotIn("entinel", redacted_space)
+        self.assertNotIn("secret value", redacted_space)
+        self.assertIn("[redacted]", redacted_space)
+
     def test_unknown_kind_secret_is_redacted_on_the_cli(self) -> None:
         secret = "ghp_12345678SECRET"
         repo = Repo(self)

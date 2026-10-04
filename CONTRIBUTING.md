@@ -48,7 +48,7 @@ The checker compares the committed `HEAD` with the base commit. It reads Git tre
 python3 -m unittest discover -s tests -v
 ```
 
-GitHub Actions runs those tests and the checker as `check-packages` on every pull request to `main`, including forks and documentation-only or placeholder-only proposals, and on every push to `main`. A blocking failure is a GitHub error annotation and a nonzero exit status. A warning is a GitHub warning annotation for secret-like text or a personal path. Warnings alone do not fail the check. They still need a person to review them.
+GitHub Actions runs those tests and the checker as `check-packages` on every pull request to `main`, including forks and documentation-only or placeholder-only proposals, and on every push to `main`. A blocking failure is a GitHub error annotation and a nonzero exit status. A warning is a GitHub warning annotation for secret-like text or a personal path. Annotations name the finding and the file location. They do not print a matched token, private key, assignment or personal path, including when that text is also quoted by a blocking error. Warnings alone do not fail the check. They still need a person to review them.
 
 Published versions are immutable. The check fails if a version already on the base branch is edited, deleted, renamed or has a file mode change, even when the proposal also adds a newer version. A change is a new version directory: `v1` for a new package, or one past the highest published version.
 

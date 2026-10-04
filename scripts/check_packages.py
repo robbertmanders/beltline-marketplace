@@ -55,6 +55,15 @@ WARNINGS = (
     ("personal-path", PERSONAL_PATH, "Possible personal path; review before merging"),
 )
 
+# Wider than the warning detectors so a blocking message cannot keep the rest of a
+# matched token, key block, assignment or personal path.
+REDACTIONS = (
+    GITHUB_TOKEN,
+    re.compile(r"-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----[\s\S]*"),
+    SECRET_ASSIGNMENT,
+    re.compile(r"(?:/Users/|/home/|[A-Za-z]:[\\/]+Users[\\/])\S*"),
+)
+
 
 class GitFailure(Exception):
     pass
@@ -109,12 +118,19 @@ def escape_data(value: str) -> str:
     return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
 
+def redact_sensitive(text: str) -> str:
+    """Replace secret-like spans so a diagnostic cannot reprint a matched value."""
+    for pattern in REDACTIONS:
+        text = pattern.sub("[redacted]", text)
+    return text
+
+
 def escape_property(value: str) -> str:
     return escape_data(value).replace(":", "%3A").replace(",", "%2C")
 
 
 def format_annotation(diagnostic: Diagnostic) -> str:
-    message = escape_data(diagnostic.message)
+    message = escape_data(redact_sensitive(diagnostic.message))
     if not diagnostic.path:
         return f"::{diagnostic.severity}::{message}"
     props = f"file={escape_property(diagnostic.path)}"
@@ -1022,7 +1038,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return check_repository(Path.cwd(), args.base, args.head)
     except GitFailure as exc:
-        print(f"::error::{escape_data(str(exc))}")
+        print(f"::error::{escape_data(redact_sensitive(str(exc)))}")
         return 1
 
 

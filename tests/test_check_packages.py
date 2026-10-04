@@ -574,6 +574,85 @@ class WarningTests(unittest.TestCase):
         files["packages/example/v1/README.md"] = b"Mirrors owner/private-widget.\n"
         self.assertEqual(check(files), [])
 
+    def test_blocking_diagnostics_do_not_reprint_secret_like_text(self) -> None:
+        sentinels = [
+            "ghp_12345678SECRET",
+            "gho_12345678SECRET",
+            "ghu_12345678SECRET",
+            "ghs_12345678SECRET",
+            "ghr_12345678SECRET",
+            "github_pat_12345678SECRET",
+            "-----BEGIN OPENSSH PRIVATE KEY-----\nsentinel-key-body\n",
+            "password=sentinel-secret-value",
+            "/Users/sentinel-reviewer/notes",
+            "/home/sentinel-reviewer/notes",
+            "C:\\Users\\sentinel-reviewer\\notes",
+        ]
+        for secret in sentinels:
+            with self.subTest(secret=secret.split("\n", 1)[0][:24]):
+                document = manifest("sample", "belt", "Sample", "Ships.")
+                document["kind"] = secret
+                files = belt_package("sample")
+                files["packages/sample/v1/package.json"] = dumps(document)
+                found = check(files)
+                output = rendered(found)
+                self.assertNotIn(secret, output)
+                self.assertNotIn("sentinel", output)
+                self.assertIn("unknown kind", output)
+                self.assertIn("[redacted]", output)
+                self.assertTrue(any(item.severity == "warning" for item in found))
+                self.assertEqual(check_packages.exit_code(found), 1)
+                for line in output.splitlines():
+                    for _category, pattern, _message in check_packages.WARNINGS:
+                        self.assertIsNone(pattern.search(line))
+
+        document = manifest("sample", "belt", "Sample", "Ships.")
+        document["ghp_12345678SECRET"] = True
+        files = belt_package("sample")
+        files["packages/sample/v1/package.json"] = dumps(document)
+        output = rendered(check(files))
+        self.assertNotIn("ghp_12345678SECRET", output)
+        self.assertIn("unknown keys", output)
+        self.assertIn("[redacted]", output)
+        for line in output.splitlines():
+            for _category, pattern, _message in check_packages.WARNINGS:
+                self.assertIsNone(pattern.search(line))
+
+    def test_unknown_kind_secret_is_redacted_on_the_cli(self) -> None:
+        secret = "ghp_12345678SECRET"
+        repo = Repo(self)
+        repo.write("packages/.gitkeep", b"")
+        base = repo.commit("placeholder")
+        document = {
+            "schemaVersion": 1,
+            "id": "sample",
+            "name": "Sample",
+            "kind": secret,
+            "summary": "Ships.",
+            "author": "octocat",
+            "tags": [],
+        }
+        repo.write(
+            "packages/sample/v1/package.json",
+            (json.dumps(document, separators=(",", ":")) + "\n").encode(),
+        )
+        repo.commit("secret kind")
+        result = run_check(repo, base)
+        self.assertNotEqual(result.returncode, 0)
+        combined = result.stdout + result.stderr
+        self.assertNotIn(secret, combined)
+        self.assertIn(
+            '::error file=packages/sample/v1/package.json,line=1::unknown kind "[redacted]"',
+            result.stdout,
+        )
+        self.assertIn(
+            "::warning file=packages/sample/v1/package.json,line=1::Possible GitHub token; review before merging",
+            result.stdout,
+        )
+        error_at = result.stdout.index("::error")
+        warning_at = result.stdout.index("::warning")
+        self.assertLess(error_at, warning_at)
+
     def test_annotation_escaping(self) -> None:
         document = manifest("widget", "belt", "Widget", "Ships.")
         document["kind"] = "wei%\nrd"

@@ -1,0 +1,11 @@
+{
+  "author" : "robbertmanders",
+  "id" : "resolve-conflicts",
+  "kind" : "agent",
+  "name" : "Resolve conflicts",
+  "schemaVersion" : 1,
+  "summary" : "Brings a feature branch up to date and resolves conflicts.",
+  "tags" : [
+    "built-in"
+  ]
+}

@@ -1,0 +1,321 @@
+{
+  "afkEnabled" : false,
+  "base" : "",
+  "forks" : [
+    {
+      "id" : "fork-1",
+      "routes" : [
+        {
+          "id" : "route-1",
+          "name" : "Approve"
+        },
+        {
+          "id" : "route-2",
+          "name" : "Needs you"
+        }
+      ]
+    }
+  ],
+  "id" : "belt-2",
+  "name" : "PR Review",
+  "policies" : {
+    "commentOnHold" : false,
+    "retriageOnEdit" : true,
+    "stopOnClose" : true,
+    "waitForBlockers" : true
+  },
+  "repos" : [
+
+  ],
+  "stages" : [
+    {
+      "agent" : {
+        "id" : "review",
+        "version" : 3
+      },
+      "brief" : "",
+      "fallback" : "hold",
+      "id" : "review",
+      "model" : "grok-4.7",
+      "name" : "Review",
+      "outcomes" : [
+        {
+          "id" : "59D4FF03-3D9A-4B6D-9149-02AE311AB100",
+          "name" : "no blocking findings",
+          "then" : {
+            "do" : "next"
+          },
+          "tone" : "good",
+          "when" : "Nothing must change before merging."
+        },
+        {
+          "id" : "22502FE5-EA74-44A9-BE90-BC1CFE418136",
+          "name" : "blocking findings",
+          "then" : {
+            "do" : "goto",
+            "to" : "draft"
+          },
+          "tone" : "problem",
+          "when" : "Something must change before merging."
+        }
+      ],
+      "runner" : "cursor",
+      "slots" : 2,
+      "thinking" : "high",
+      "type" : "agent",
+      "workspace" : "readOnly",
+      "writes" : "review.md"
+    },
+    {
+      "agent" : {
+        "id" : "triage",
+        "version" : 7
+      },
+      "brief" : "Read the review in {review} and the change itself: `git diff origin/{base}...HEAD`. Do not change files, push, or comment on anything.\n\nThe review found nothing that must change before merging. Decide how risky it is to approve this pull request without a person looking at it: what could break, how much it touches, and how well it is tested. When the evidence sits between two levels, pick the higher one.\n\nWrite {triage}: the risk level and one paragraph on why, then a short approval summary a reviewer would post.",
+      "fallback" : "hold",
+      "id" : "triage",
+      "model" : "openrouter/stealth/space-bunny-alpha",
+      "name" : "Triage",
+      "outcomes" : [
+        {
+          "id" : "21772955-94BC-4992-999C-8DB73D6CC48B",
+          "name" : "low",
+          "then" : {
+            "do" : "route",
+            "route" : "route-1"
+          },
+          "tone" : "good",
+          "when" : "Small, well-contained, and safe to approve without a person looking."
+        },
+        {
+          "id" : "F905737F-EBA4-4865-8399-58F869778C0D",
+          "name" : "medium",
+          "then" : {
+            "do" : "route",
+            "route" : "route-2"
+          },
+          "tone" : "you",
+          "when" : "Probably fine, but a person should look before it is approved."
+        },
+        {
+          "id" : "28356592-8926-4EBE-B8AB-A55CA8B0B31C",
+          "name" : "high",
+          "then" : {
+            "do" : "route",
+            "route" : "route-2"
+          },
+          "tone" : "you",
+          "when" : "Risky: it could break things or touches a lot."
+        }
+      ],
+      "runner" : "pi",
+      "slots" : 2,
+      "thinking" : "medium",
+      "type" : "agent",
+      "workspace" : "readOnly",
+      "writes" : "triage.md"
+    },
+    {
+      "agent" : {
+        "id" : "post-review",
+        "version" : 6
+      },
+      "brief" : "Approve {issue} with `gh pr review --approve`. Do not change files, push, or comment anywhere else.\n\nUse the approval summary in {triage} as the review's body, without its `Outcome:` line. Keep it short.\n\nWrite {output}: that you approved it and the review's link.",
+      "fallback" : "hold",
+      "id" : "approve-pr",
+      "model" : "grok-4.7",
+      "name" : "Approve PR",
+      "outcomes" : [
+        {
+          "id" : "35D28EAD-E9DF-467C-8C2A-37AF3580235E",
+          "name" : "approved",
+          "then" : {
+            "do" : "done"
+          },
+          "tone" : "good",
+          "when" : "The pull request is approved."
+        },
+        {
+          "id" : "B442865B-B89E-44BC-B75F-F51FAF99D2E5",
+          "name" : "failed",
+          "then" : {
+            "do" : "hold"
+          },
+          "tone" : "problem",
+          "when" : "The approval couldn't be submitted."
+        }
+      ],
+      "route" : "route-1",
+      "runner" : "cursor",
+      "slots" : 2,
+      "thinking" : "medium",
+      "type" : "agent",
+      "workspace" : "readOnly",
+      "writes" : "posted-review.md"
+    },
+    {
+      "agent" : {
+        "id" : "custom",
+        "version" : 1
+      },
+      "brief" : "You prepare the review a person will post on {issue}. Do not change files, push, or comment on anything: you only write {output}.\n\nRead the review in {review}, the risk assessment in {triage} if there is one, and the change: `git diff origin/{base}...HEAD`.\n\n**First, ask.** Unless this attempt has a note from the person, list every finding, numbered, each with its severity, its file and line in the pull request's new code, and one sentence on what is wrong. Say which ones you would insist on. Write that list to {output} and end with `Outcome: needs your picks`. The person will tell you which findings matter.\n\n**Then, draft.** Once the person has said which findings matter, in their answer or in a note for this attempt, write the review to {output} with only those findings:\n\n## Verdict\n`request changes`, or `approve` if the person said nothing must change.\n\n## Summary\nThe review's body: a few sentences on what must change and why, in a friendly, direct tone.\n\n## Inline comments\nOne per finding, as:\n### `path/to/file.ext:42`\nThe comment, in Markdown. Suggest the fix when it is small.\n\nEvery line must be one the pull request adds or changes (the right side of the diff); check it against the diff. A finding without such a line goes in the summary instead. End with `Outcome: drafted`.",
+      "fallback" : "hold",
+      "id" : "draft",
+      "model" : "openrouter/stealth/space-bunny-alpha",
+      "name" : "Draft review",
+      "outcomes" : [
+        {
+          "id" : "57920113-ADF6-44ED-9C06-5E403C571A12",
+          "name" : "needs your picks",
+          "then" : {
+            "do" : "hold"
+          },
+          "tone" : "you",
+          "when" : "The findings are listed and the person hasn't said which matter yet."
+        },
+        {
+          "id" : "25698490-821A-411E-8050-1B6E255B1DB6",
+          "name" : "drafted",
+          "then" : {
+            "do" : "next"
+          },
+          "tone" : "good",
+          "when" : "The review is drafted with the findings the person picked."
+        },
+        {
+          "id" : "11781CB4-FED8-451B-B577-3F828DCDDFDD",
+          "name" : "failed",
+          "then" : {
+            "do" : "hold"
+          },
+          "tone" : "problem",
+          "when" : "It couldn't read the review or the change."
+        }
+      ],
+      "route" : "route-2",
+      "runner" : "pi",
+      "slots" : 2,
+      "type" : "agent",
+      "workspace" : "readOnly",
+      "writes" : "draft.md"
+    },
+    {
+      "brief" : "",
+      "fallback" : "hold",
+      "id" : "go-ahead",
+      "model" : "",
+      "name" : "Go ahead",
+      "outcomes" : [
+        {
+          "id" : "ED18F4E6-2F1A-485C-9F53-DCDB7DD09A7B",
+          "name" : "post it",
+          "then" : {
+            "do" : "next"
+          },
+          "tone" : "good",
+          "when" : "Post the review"
+        },
+        {
+          "id" : "CBE9EE53-5BA9-470F-B252-A8266A4CB0B7",
+          "name" : "redraft",
+          "then" : {
+            "do" : "goto",
+            "to" : "draft",
+            "withOutput" : true
+          },
+          "tone" : "you",
+          "when" : "Change the draft, with a note"
+        },
+        {
+          "id" : "52E3E99B-A5F5-44D4-878C-3CD8567DA932",
+          "name" : "parked",
+          "then" : {
+            "do" : "park"
+          },
+          "tone" : "neutral",
+          "when" : "Park it"
+        }
+      ],
+      "route" : "route-2",
+      "slots" : 2,
+      "type" : "approve",
+      "workspace" : "readOnly",
+      "writes" : "decision"
+    },
+    {
+      "agent" : {
+        "id" : "post-review",
+        "version" : 6
+      },
+      "brief" : "Post the review drafted in {custom} on {issue}. Do not change files, push, or comment anywhere else.\n\nIf its verdict is `approve`, run `gh pr review --approve` with its summary as the body, and skip the rest.\n\nOtherwise submit one review that requests changes, with the summary as its body and each inline comment on its line. `gh pr review` can't add inline comments, so write the review as JSON and send it with `gh api --method POST repos/<owner>/<repo>/pulls/<number>/reviews --input review.json` (put review.json outside the checkout):\n\n```json\n{\"event\": \"REQUEST_CHANGES\", \"body\": \"<summary>\", \"comments\": [{\"path\": \"path/to/file.ext\", \"line\": 42, \"side\": \"RIGHT\", \"body\": \"<comment>\"}]}\n```\n\nIf GitHub rejects a comment because its line isn't in the diff, move that comment into the body under its file and line, and send the review again. Submit it once only.\n\nWrite {output}: the verdict you submitted, how many inline comments it has, and the review's link.",
+      "fallback" : "hold",
+      "id" : "post-review",
+      "model" : "grok-4.7",
+      "name" : "Post review",
+      "outcomes" : [
+        {
+          "id" : "30CE1820-5FAC-4A5F-8E6B-3F4464117BC0",
+          "name" : "submitted",
+          "then" : {
+            "do" : "done"
+          },
+          "tone" : "good",
+          "when" : "The review is submitted on the pull request."
+        },
+        {
+          "id" : "5C83B9BE-E45A-4D79-B1CD-388EF1CEAE63",
+          "name" : "failed",
+          "then" : {
+            "do" : "hold"
+          },
+          "tone" : "problem",
+          "when" : "The review couldn't be submitted."
+        }
+      ],
+      "route" : "route-2",
+      "runner" : "cursor",
+      "slots" : 2,
+      "thinking" : "medium",
+      "type" : "agent",
+      "workspace" : "readOnly",
+      "writes" : "posted-review.md"
+    },
+    {
+      "brief" : "",
+      "fallback" : "hold",
+      "id" : "watch",
+      "model" : "",
+      "name" : "Watch the pull request",
+      "outcomes" : [
+        {
+          "id" : "DD1FA9D8-B29F-4ED3-AF29-DE5E1550F384",
+          "name" : "merged",
+          "then" : {
+            "do" : "done"
+          },
+          "tone" : "good",
+          "when" : "merged"
+        },
+        {
+          "id" : "793BC9E2-C734-4987-B900-88B346BC55CA",
+          "name" : "closed",
+          "then" : {
+            "do" : "done"
+          },
+          "tone" : "neutral",
+          "when" : "closed"
+        }
+      ],
+      "slots" : 2,
+      "type" : "watch",
+      "workspace" : "readOnly",
+      "writes" : "pull request"
+    }
+  ],
+  "trigger" : {
+    "kind" : "reviews",
+    "poll" : 60,
+    "reviewers" : "meAndTeams"
+  },
+  "version" : 21
+}

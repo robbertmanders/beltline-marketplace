@@ -2,20 +2,20 @@
 
 Packages in this repository follow the format in [README.md](README.md): the [manifest](README.md#manifest), the [layouts](README.md#layouts) for a factory, a belt and an agent, and the [stripping rules](README.md#what-a-shared-package-keeps).
 
-A package is published only when a pull request has been reviewed and merged. Do not push commits directly to the default branch. The default branch is currently `main`. Existing versions stay as they were merged; a change is a new `packages/<id>/v<n>/` directory.
-
-Share… in the app is planned. It is not part of this repository, and these documents do not add it. Until it is available, prepare the package by hand.
+A package is published only when a pull request has been reviewed and merged. A public proposal may already be visible before publication. Do not push commits directly to the default branch. This repository's default branch is currently `main`. Existing versions stay as they were merged; a change is a new `packages/<id>/v<n>/` directory.
 
 ## Share from the app
 
-The planned Share… action is on Belts (one belt), on Agents (one agent) and on Settings → Factories (the whole library as a factory package).
+Share… is available on Belts (one saved belt version), Agents (one saved agent version) and Settings → Factories (the whole saved library as a factory package). Save new or edited belts and agents before sharing them. Factory sharing includes all saved versions and excludes unsaved editor changes.
 
-1. Choose Share… on that page.
-2. Enter the package name, a one-line summary, tags and an optional README.
-3. Read the preview. It shows the stripped package: every belt has `repos` set to `[]`, `base` set to `""` and `afkEnabled` set to `false`, and a factory's belt flag files are paused.
-4. The app opens a pull request for review. The branch is `beltline/<id>-v<n>` in your fork of this repository, or in the marketplace repository itself when you are its owner. `<id>` is the package id and `<n>` is one past the highest version that package already has. The pull request targets the marketplace's default branch, currently `main`. Versions already on that branch are left intact.
+1. Choose Share… on Belts, Agents or Settings → Factories.
+2. Enter a package name and a nonblank one-line summary. The name must contain an ASCII letter or digit; Beltline derives the package id from it by lowercasing ASCII letters and digits and replacing other runs with a dash. Add optional comma-separated tags and an optional UTF-8 Markdown README of at most 65,536 bytes (64 KB).
+3. Review the stripped package preview and destination. Shared belts have `repos` set to `[]`, `base` set to `""` and `afkEnabled` set to `false`; factory belts are paused. The proposal does not change your local definitions or personal factory.
+4. Press Propose. Beltline adds `packages/<id>/v<n>/`, using `v1` for a new package or one above its highest published version, and preserves existing releases and package kind. The branch is `beltline/<id>-v<n>`. The pull request title is `Add <name> v<n>` and its body is exactly `Proposed from Beltline for review.` It targets the configured marketplace's actual default branch (currently `main` here). The marketplace owner branches that repository; other users use a verified fork that Beltline creates if needed and syncs with the default branch. If the proposal branch is already occupied, Beltline refuses to overwrite it. After creation, the sheet provides an Open proposal link. Publication occurs only after review and merge.
 
-The pull request is the proposal. It is public only after it is reviewed and merged.
+If the latest release has exactly the same file set and bytes, including `package.json` and `README.md`, Beltline reports **Already shared** and creates no version, branch, commit or pull request. Change the package content to propose a new version.
+
+The pull request is the proposal. A public proposal may be visible before publication; review and merge publish the package version.
 
 ## Share by hand
 
@@ -23,7 +23,7 @@ The pull request is the proposal. It is public only after it is reviewed and mer
 2. Create a branch. Do the work on that branch. Do not commit on the default branch, and do not push the default branch.
 3. Add a new version folder, `packages/<id>/v<n>/`, with the files in the [README layouts](README.md#layouts). `<n>` is one past the highest existing version of that package. Keep the same package id and kind. Leave every existing version folder untouched.
 4. Strip the belt settings the same way the app would. In every belt version, including every version inside a factory, set `repos` to `[]`, `base` to `""` and `afkEnabled` to `false`. In a factory package, every belt requires `state.json` with `paused` set to `true` and a boolean `archived`. Agent `state.json` remains optional and may contain only a boolean `archived`.
-5. Run the package check and its tests. Fix every blocking failure before opening the pull request.
+5. Run the package check and its tests. Fix every blocking failure before opening the pull request. Reviewers should require a passing `check-packages` check before merging a package proposal.
 
    ```bash
    python3 scripts/check_packages.py --base origin/main
@@ -48,7 +48,7 @@ The checker compares the committed `HEAD` with the base commit. It reads Git tre
 python3 -m unittest discover -s tests -v
 ```
 
-GitHub Actions runs those tests and the checker as `check-packages` on every pull request to `main`, including forks and documentation-only or placeholder-only proposals, and on every push to `main`. A blocking failure is a GitHub error annotation and a nonzero exit status. A warning is a GitHub warning annotation for secret-like text or a personal path. Annotations name the finding and the file location. They do not print a matched token, private key, assignment or personal path, including when that text is also quoted by a blocking error. Warnings alone do not fail the check. They still need a person to review them.
+GitHub Actions runs those tests and the checker as `check-packages`. The existing workflow runs on every pull request to `main`, including forks and documentation-only or placeholder-only proposals, and on every push to `main`. A blocking failure is a GitHub error annotation and a nonzero exit status. A warning is a GitHub warning annotation for secret-like text or a personal path. Annotations name the finding and the file location. They do not print a matched token, private key, assignment or personal path, including when that text is also quoted by a blocking error. Warnings alone do not fail the check. Reviewers should require a passing check before merging package proposals and inspect sensitive free text and warnings manually.
 
 Published versions are immutable. The check fails if a version already on the base branch is edited, deleted, renamed or has a file mode change, even when the proposal also adds a newer version. A change is a new version directory: `v1` for a new package, or one past the highest published version.
 

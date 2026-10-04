@@ -1,0 +1,11 @@
+{
+  "author" : "robbertmanders",
+  "id" : "verify",
+  "kind" : "agent",
+  "name" : "Verify",
+  "schemaVersion" : 1,
+  "summary" : "Checks a change against its specification and evidence.",
+  "tags" : [
+    "built-in"
+  ]
+}

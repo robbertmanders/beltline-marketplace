@@ -1,0 +1,12 @@
+{
+  "author" : "robbertmanders",
+  "id" : "issues-to-pull-requests",
+  "kind" : "belt",
+  "name" : "Issues to pull requests",
+  "schemaVersion" : 1,
+  "summary" : "Runs labelled GitHub issues from triage through pull request merge and wrap-up.",
+  "tags" : [
+    "example",
+    "issues"
+  ]
+}

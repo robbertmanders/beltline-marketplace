@@ -1,0 +1,12 @@
+{
+  "author" : "robbertmanders",
+  "id" : "starter-factory",
+  "kind" : "factory",
+  "name" : "Starter factory",
+  "schemaVersion" : 1,
+  "summary" : "A ready-to-configure issue workflow and epic workflow.",
+  "tags" : [
+    "example",
+    "factory"
+  ]
+}

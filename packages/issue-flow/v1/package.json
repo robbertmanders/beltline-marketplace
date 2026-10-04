@@ -1,0 +1,11 @@
+{
+  "author": "octocat",
+  "id": "issue-flow",
+  "kind": "belt",
+  "name": "Issue flow",
+  "schemaVersion": 1,
+  "summary": "Triage an issue and build it.",
+  "tags": [
+    "issues"
+  ]
+}

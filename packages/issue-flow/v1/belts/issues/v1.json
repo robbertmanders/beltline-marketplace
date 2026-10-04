@@ -1,0 +1,43 @@
+{
+  "afkEnabled": false,
+  "base": "",
+  "id": "issues",
+  "name": "Issues",
+  "repos": [
+    "synthetic/private-repo"
+  ],
+  "stages": [
+    {
+      "agent": {
+        "id": "triage",
+        "version": 1
+      },
+      "brief": "Do the work.",
+      "id": "stage-0",
+      "name": "stage-0",
+      "outcomes": [
+        {
+          "id": "done",
+          "name": "done",
+          "then": {
+            "do": "next"
+          },
+          "tone": "good",
+          "when": "The work is finished."
+        }
+      ],
+      "type": "agent"
+    }
+  ],
+  "trigger": {
+    "assignee": "anyone",
+    "kind": "issues",
+    "label": "agent",
+    "poll": 60,
+    "repos": [
+      "synthetic/private-repo"
+    ],
+    "base": "hidden-base"
+  },
+  "version": 1
+}

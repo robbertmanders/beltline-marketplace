@@ -45,14 +45,30 @@ FACTORY_KEYS = ["schemaVersion", "id", "name"]
 
 GITHUB_TOKEN = re.compile(r"(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_)[A-Za-z0-9_]{8,}")
 PRIVATE_KEY = re.compile(r"-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----")
+# One non-space character is enough to warn. Redaction uses a wider pattern.
 SECRET_ASSIGNMENT = re.compile(r'(?i)(?:"|\b)(?:token|password|secret)(?:"|\b)[ \t]*[=:][ \t]*\S')
 PERSONAL_PATH = re.compile(r"(?:/Users/|/home/|[A-Za-z]:[\\/]+Users[\\/])")
+# Whole assigned value: a quoted value, or an unquoted value through the next space.
+ASSIGNMENT_REDACTION = re.compile(
+    r'(?i)(?:"|\b)(?:token|password|secret)(?:"|\b)[ \t]*[=:][ \t]*(?:"[^"]*"|\'[^\']*\'|\S+)'
+)
 
 WARNINGS = (
     ("github-token", GITHUB_TOKEN, "Possible GitHub token; review before merging"),
     ("private-key", PRIVATE_KEY, "Possible private key; review before merging"),
     ("secret-assignment", SECRET_ASSIGNMENT, "Possible secret assignment; review before merging"),
     ("personal-path", PERSONAL_PATH, "Possible personal path; review before merging"),
+)
+
+# Wider than the warning detectors so a blocking message cannot keep the rest of a
+# matched token, key block, assignment or personal path. Token redaction already
+# takes the full [A-Za-z0-9_] run, a private-key header takes the rest of the
+# message, and a personal path takes the rest of that non-space token.
+REDACTIONS = (
+    GITHUB_TOKEN,
+    re.compile(r"-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----[\s\S]*"),
+    ASSIGNMENT_REDACTION,
+    re.compile(r"(?:/Users/|/home/|[A-Za-z]:[\\/]+Users[\\/])\S*"),
 )
 
 
@@ -109,12 +125,19 @@ def escape_data(value: str) -> str:
     return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
 
+def redact_sensitive(text: str) -> str:
+    """Replace secret-like spans so a diagnostic cannot reprint a matched value."""
+    for pattern in REDACTIONS:
+        text = pattern.sub("[redacted]", text)
+    return text
+
+
 def escape_property(value: str) -> str:
     return escape_data(value).replace(":", "%3A").replace(",", "%2C")
 
 
 def format_annotation(diagnostic: Diagnostic) -> str:
-    message = escape_data(diagnostic.message)
+    message = escape_data(redact_sensitive(diagnostic.message))
     if not diagnostic.path:
         return f"::{diagnostic.severity}::{message}"
     props = f"file={escape_property(diagnostic.path)}"
@@ -1022,7 +1045,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return check_repository(Path.cwd(), args.base, args.head)
     except GitFailure as exc:
-        print(f"::error::{escape_data(str(exc))}")
+        print(f"::error::{escape_data(redact_sensitive(str(exc)))}")
         return 1
 
 

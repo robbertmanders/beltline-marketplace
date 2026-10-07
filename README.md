@@ -10,6 +10,12 @@ Market uses `robbertmanders/beltline-marketplace` by default. The Marketplace re
 
 Your own factory repository, and Settings → Factories, keep the archive format they already use. A personal factory backup lives under `factories/<id>/v<n>/` and still contains that setup's repositories and base branches. Marketplace packages live under `packages/<package>/v<n>/` and are prepared for someone else, as described below.
 
+## Catalog reset
+
+Issue [#29](https://github.com/robbertmanders/beltline-marketplace/issues/29) intentionally cleared the current catalog. Every factory, belt and agent published before the reset, including older releases and embedded definitions, was removed from the current catalog; `packages/` now holds only the empty placeholder `packages/.gitkeep`, so the removed packages are no longer available to browse, preview or newly import. The reset removed the current catalog only, and it did not delete Git history: old files remain in earlier commits and in open proposals, but they are not part of the current catalog. The reset did not touch anyone's library. Every previously imported local factory, belt and agent stays, together with its saved versions, runs and settings; clearing the catalog never modifies imported copies.
+
+The reset is a single reviewed exception. Outside it, published versions are immutable: a merged version keeps its files, and a change is always a new `packages/<package>/v<n>/` directory numbered one past the highest published version. The package check accepts removal of published versions only for the exact complete catalog snapshot that issue #29 cleared, down to `packages/.gitkeep`. Any other removal, including a partial removal of that snapshot or the complete removal of a different catalog, fails the check.
+
 ## Manifest
 
 Every package version has a manifest at `packages/<package>/v<n>/package.json`. The same file is used for a factory, a belt and an agent.
@@ -147,7 +153,7 @@ A hand-written id may use ASCII letters of either case, digits, hyphens and unde
 
 Version numbers are positive integers (`v1`, `v2`, and so on). A belt definition's id and version agree with its path. An agent file's identity frontmatter cannot contradict its path. Package versions do not have to match definition versions.
 
-A merged package version is immutable. Its files stay as they were merged, so a merged `v2` is never edited. Publish a change as a new directory numbered one past the highest version that package already has, keeping the same package id and kind. When `v2` is the highest, the change is `v3`. When the published versions are `v1` and `v4`, the change is `v5`.
+A merged package version is immutable. Its files stay as they were merged, so a merged `v2` is never edited. Publish a change as a new directory numbered one past the highest version that package already has, keeping the same package id and kind. When `v2` is the highest, the change is `v3`. When the published versions are `v1` and `v4`, the change is `v5`. The one exception is the [catalog reset](#catalog-reset) in issue #29, which cleared the complete catalog reviewed at that time; the package check recognizes that exact snapshot, and every other removal still fails.
 
 ## What a shared package keeps
 

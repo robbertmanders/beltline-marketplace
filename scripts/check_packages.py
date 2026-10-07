@@ -101,6 +101,16 @@ def blob_sha(content: bytes) -> str:
     return hashlib.sha1(header + content).hexdigest()
 
 
+# Issue #29 deliberately cleared the complete catalog reviewed at commit
+# acaf61e89f5fc2588afb25e658a87d2dc1a48d1b, whose packages tree is
+# 738d7d92d1d0bd9c22e91b4bd4c0591531639631. That one transition may remove
+# published versions down to the original empty packages/.gitkeep. Pin the
+# catalog's sorted paths, modes and blob ids so no other base or head is
+# accepted, without a network lookup or the historical commit at runtime.
+RESET_CATALOG_FINGERPRINT = "809ee4f78014d8e840417d87dae94c447fac05ff05b3db720d05f48c21c47481"
+RESET_CATALOG_HEAD = {"packages/.gitkeep": ("100644", "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391")}
+
+
 def make_entry(content: bytes | None, mode: str = "100644", sha: str | None = None) -> Entry:
     if sha is None:
         if content is None:
@@ -328,7 +338,38 @@ def paths_under(entries: dict[str, Entry], prefix: str) -> dict[str, Entry]:
     return {path: entry for path, entry in entries.items() if path.startswith(needle)}
 
 
-def immutability(head: dict[str, Entry], base: dict[str, Entry]) -> list[Diagnostic]:
+def catalog_entries(entries: dict[str, Entry]) -> dict[str, Entry]:
+    return {path: entry for path, entry in entries.items() if path.startswith("packages/")}
+
+
+def catalog_fingerprint(entries: dict[str, Entry]) -> str:
+    """Fingerprint the sorted catalog paths, modes and blob ids.
+
+    Paths outside packages/ are ignored, and content is not re-hashed; the
+    entry's Git blob id is authoritative. This fixes the exact full catalog
+    that issue #29's reviewed reset may remove.
+    """
+    digest = hashlib.sha256()
+    for path, entry in sorted(catalog_entries(entries).items()):
+        digest.update("\0".join((entry.mode, entry.sha, path)).encode("utf-8", "surrogateescape"))
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def is_catalog_reset(head: dict[str, Entry], base: dict[str, Entry]) -> bool:
+    """True only for the reviewed issue #29 full-catalog reset.
+
+    The base must fingerprint as the complete catalog reviewed at commit
+    acaf61e, and the head catalog must be exactly the original empty
+    packages/.gitkeep. Changes outside packages/ do not take part.
+    """
+    if catalog_fingerprint(base) != RESET_CATALOG_FINGERPRINT:
+        return False
+    head_catalog = {path: (entry.mode, entry.sha) for path, entry in catalog_entries(head).items()}
+    return head_catalog == RESET_CATALOG_HEAD
+
+
+def immutability(head: dict[str, Entry], base: dict[str, Entry], *, reset: bool = False) -> list[Diagnostic]:
     diagnostics: list[Diagnostic] = []
     prefixes = {release_prefix(path) for path in base}
     prefixes.discard(None)
@@ -336,8 +377,9 @@ def immutability(head: dict[str, Entry], base: dict[str, Entry]) -> list[Diagnos
         assert prefix is not None
         before = paths_under(base, prefix)
         after = paths_under(head, prefix)
-        for path in sorted(set(before) - set(after)):
-            add(diagnostics, path, 0, "published file deleted")
+        if not reset:
+            for path in sorted(set(before) - set(after)):
+                add(diagnostics, path, 0, "published file deleted")
         for path in sorted(set(after) - set(before)):
             add(diagnostics, path, 0, "published file added")
         for path in sorted(set(before) & set(after)):
@@ -1019,7 +1061,7 @@ def structure(entries: dict[str, Entry]) -> list[Diagnostic]:
 
 def evaluate(head: dict[str, Entry], base: dict[str, Entry]) -> list[Diagnostic]:
     diagnostics: list[Diagnostic] = []
-    diagnostics.extend(immutability(head, base))
+    diagnostics.extend(immutability(head, base, reset=is_catalog_reset(head, base)))
     diagnostics.extend(structure(head))
     diagnostics.extend(numbering_and_kind(head, base))
     return sort_unique(diagnostics)

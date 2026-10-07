@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,6 +30,9 @@ from package_samples import (  # noqa: E402
 
 ZERO = "0" * 40
 SCRIPT = ROOT / "scripts" / "check_packages.py"
+# The catalog reviewed for issue #29 and its packages tree at that commit.
+BASELINE_COMMIT = "acaf61e89f5fc2588afb25e658a87d2dc1a48d1b"
+BASELINE_PACKAGES_TREE = "738d7d92d1d0bd9c22e91b4bd4c0591531639631"
 
 
 def entries(files: dict[str, bytes]) -> dict[str, check_packages.Entry]:
@@ -495,6 +500,132 @@ class VersionTests(unittest.TestCase):
         self.assertIn("published file mode changed", messages(check_packages.evaluate(head, entries(base))))
 
 
+class ResetTests(unittest.TestCase):
+    """Issue #29's single reviewed catalog reset and its guards."""
+
+    def snapshot(self) -> dict[str, bytes]:
+        return {
+            **belt_package("issue-flow"),
+            **agent_package("review"),
+            **factory_package("team-setup"),
+        }
+
+    @contextmanager
+    def pinned(self, base: dict[str, bytes]):
+        """Treat a synthetic catalog as the reviewed reset snapshot."""
+        previous = check_packages.RESET_CATALOG_FINGERPRINT
+        check_packages.RESET_CATALOG_FINGERPRINT = check_packages.catalog_fingerprint(entries(base))
+        try:
+            yield
+        finally:
+            check_packages.RESET_CATALOG_FINGERPRINT = previous
+
+    def test_reviewed_snapshot_resets_to_gitkeep(self) -> None:
+        base = self.snapshot()
+        with self.pinned(base):
+            found = check({"packages/.gitkeep": b""}, base)
+        self.assertEqual(found, [])
+        self.assertEqual(check_packages.exit_code(found), 0)
+
+    def test_reset_ignores_changes_outside_packages(self) -> None:
+        base = self.snapshot()
+        with self.pinned(base):
+            found = check({"packages/.gitkeep": b"", "README.md": b"changed\n"}, base)
+        self.assertEqual(found, [])
+
+    def test_empty_and_placeholder_only_transitions_pass(self) -> None:
+        self.assertEqual(check({"packages/.gitkeep": b""}), [])
+        self.assertEqual(check({"packages/.gitkeep": b""}, {"packages/.gitkeep": b""}), [])
+        self.assertEqual(check({"packages/.gitkeep": b"\n"}, {"packages/.gitkeep": b""}), [])
+        self.assertEqual(check({"packages/.gitkeep": b"", "docs.md": b"new\n"}, {"docs.md": b"old\n"}), [])
+
+    def test_partial_removal_from_the_pinned_snapshot_fails(self) -> None:
+        base = self.snapshot()
+        head = {"packages/.gitkeep": b""}
+        head.update({path: data for path, data in base.items() if not path.startswith("packages/issue-flow/")})
+        with self.pinned(base):
+            found = check(head, base)
+        self.assertEqual(check_packages.exit_code(found), 1)
+        self.assertIn("published file deleted", messages(found))
+
+    def test_retaining_one_release_while_deleting_others_fails(self) -> None:
+        base = self.snapshot()
+        head = {"packages/.gitkeep": b""}
+        head.update({path: data for path, data in base.items() if path.startswith("packages/review/v1/")})
+        with self.pinned(base):
+            found = check(head, base)
+        self.assertEqual(check_packages.exit_code(found), 1)
+        self.assertIn("published file deleted", messages(found))
+
+    def test_removing_all_packages_from_a_different_snapshot_fails(self) -> None:
+        pinned_base = self.snapshot()
+        other_base = {path: data for path, data in pinned_base.items() if not path.startswith("packages/review/")}
+        with self.pinned(pinned_base):
+            found = check({"packages/.gitkeep": b""}, other_base)
+        self.assertEqual(check_packages.exit_code(found), 1)
+        self.assertIn("published file deleted", messages(found))
+
+    def test_modified_base_before_full_removal_fails(self) -> None:
+        original = self.snapshot()
+        payload = "packages/review/v1/agents/review/v1.md"
+        changed_bytes = dict(original)
+        changed_bytes[payload] = b"changed\n"
+        changed_path = {path: data for path, data in original.items() if path != payload}
+        changed_path["packages/review/v1/agents/review/moved.md"] = original[payload]
+        changed_mode = entries(original)
+        changed_mode[payload] = check_packages.make_entry(original[payload], mode="100755")
+        cases = {
+            "bytes": entries(changed_bytes),
+            "path": entries(changed_path),
+            "mode": changed_mode,
+        }
+        for name, base in cases.items():
+            with self.subTest(name=name):
+                with self.pinned(original):
+                    found = check_packages.evaluate({"packages/.gitkeep": check_packages.make_entry(b"")}, base)
+                self.assertEqual(check_packages.exit_code(found), 1)
+                self.assertIn("published file deleted", messages(found))
+
+    def test_removal_combined_with_a_new_release_fails(self) -> None:
+        base = self.snapshot()
+        head = {"packages/.gitkeep": b"", **belt_package("fresh-belt")}
+        with self.pinned(base):
+            found = check(head, base)
+        self.assertEqual(check_packages.exit_code(found), 1)
+        self.assertIn("published file deleted", messages(found))
+
+    def test_replaced_gitkeep_fails(self) -> None:
+        base = self.snapshot()
+        cases = {
+            "symlink": check_packages.make_entry(None, "120000", "abc"),
+            "executable": check_packages.make_entry(b"", mode="100755"),
+            "nonempty": check_packages.make_entry(b"x"),
+        }
+        for name, entry in cases.items():
+            with self.subTest(name=name):
+                with self.pinned(base):
+                    found = check_packages.evaluate({"packages/.gitkeep": entry}, entries(base))
+                self.assertEqual(check_packages.exit_code(found), 1)
+                self.assertIn("published file deleted", messages(found))
+                if name == "symlink":
+                    self.assertIn("symlink", messages(found))
+
+    def test_unpinned_snapshot_removal_still_fails(self) -> None:
+        base = self.snapshot()
+        found = check({"packages/.gitkeep": b""}, base)
+        self.assertEqual(check_packages.exit_code(found), 1)
+        self.assertIn("published file deleted", messages(found))
+
+    def test_catalog_fingerprint_ignores_outside_paths_and_entry_order(self) -> None:
+        base = entries(self.snapshot())
+        self.assertEqual(
+            check_packages.catalog_fingerprint(base),
+            check_packages.catalog_fingerprint(dict(reversed(list(base.items())))),
+        )
+        outside = {**base, "README.md": check_packages.make_entry(b"outside\n")}
+        self.assertEqual(check_packages.catalog_fingerprint(base), check_packages.catalog_fingerprint(outside))
+
+
 class WarningTests(unittest.TestCase):
     def test_warning_families_do_not_echo_the_value(self) -> None:
         sentinels = {
@@ -830,6 +961,20 @@ class DocsTests(unittest.TestCase):
         self.assertIn("warning", contributing.lower())
         self.assertIn("Every factory belt requires state.json with paused:true and a boolean archived.", readme)
         self.assertIn("Agent state.json remains optional and may contain only a boolean archived.", readme)
+        self.assertIn("## Catalog reset", readme)
+        self.assertIn("Issue [#29]", readme)
+        self.assertIn("intentionally cleared the current catalog", readme)
+        self.assertIn("previously imported local factory", readme)
+        self.assertIn("did not delete Git history", readme)
+        self.assertIn("not part of the current catalog", readme)
+        self.assertIn("packages/.gitkeep", readme)
+        self.assertIn("single reviewed exception", readme)
+        self.assertIn("catalog reset", contributing)
+        self.assertIn("issue #29", contributing)
+        self.assertIn("does not delete Git history", contributing)
+        self.assertIn("does not remove anyone's imported local copies", contributing)
+        self.assertIn("packages/.gitkeep", contributing)
+        self.assertIn("partial removals of the reset snapshot", contributing)
 
     def test_workflow_contract(self) -> None:
         text = (ROOT / ".github/workflows/check-packages.yml").read_text(encoding="utf-8")
@@ -979,6 +1124,209 @@ class GitHistoryTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
+class ResetGitTests(unittest.TestCase):
+    """CLI coverage for issue #29's reviewed catalog reset."""
+
+    def snapshot_repo(self) -> tuple[Repo, str]:
+        repo = Repo(self)
+        repo.write_tree(baseline_snapshot(self))
+        return repo, repo.commit("baseline catalog")
+
+    def clear_catalog(self, repo: Repo) -> None:
+        shutil.rmtree(Path(repo.path) / "packages")
+        repo.write("packages/.gitkeep", b"")
+
+    def test_pinned_fingerprint_matches_the_baseline_catalog(self) -> None:
+        snapshot = baseline_snapshot(self)
+        loaded = check_packages.load_tree(ROOT, BASELINE_COMMIT)
+        self.assertEqual(check_packages.catalog_fingerprint(loaded), check_packages.RESET_CATALOG_FINGERPRINT)
+        tree = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", f"{BASELINE_COMMIT}:packages"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        self.assertEqual(tree.stdout.strip(), BASELINE_PACKAGES_TREE)
+        self.assertEqual(snapshot["packages/.gitkeep"], b"")
+        self.assertGreater(len(snapshot), 1)
+
+    def test_exact_snapshot_to_gitkeep_passes_through_the_cli(self) -> None:
+        repo, base = self.snapshot_repo()
+        self.clear_catalog(repo)
+        head = repo.commit("clear catalog")
+        result = run_check(repo, base, head)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, "")
+
+    def test_empty_to_empty_and_placeholder_only_pass_through_the_cli(self) -> None:
+        repo = Repo(self)
+        repo.write("packages/.gitkeep", b"")
+        base = repo.commit("empty catalog")
+        same = run_check(repo, base, base)
+        self.assertEqual(same.returncode, 0, same.stdout + same.stderr)
+        first_commit = run_check(repo, ZERO, base)
+        self.assertEqual(first_commit.returncode, 0, first_commit.stdout + first_commit.stderr)
+        repo.write("packages/.gitkeep", b"\n")
+        head = repo.commit("placeholder only")
+        changed = run_check(repo, base, head)
+        self.assertEqual(changed.returncode, 0, changed.stdout + changed.stderr)
+
+    def assert_blocked(self, repo: Repo, base: str, head: str, snippet: str = "published file deleted") -> None:
+        result = run_check(repo, base, head)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(snippet, result.stdout)
+
+    def test_removing_one_package_from_the_snapshot_fails(self) -> None:
+        repo, base = self.snapshot_repo()
+        shutil.rmtree(Path(repo.path) / "packages" / "starter-factory")
+        self.assert_blocked(repo, base, repo.commit("remove one package"))
+
+    def test_retaining_one_release_while_deleting_others_fails(self) -> None:
+        repo, base = self.snapshot_repo()
+        packages = Path(repo.path) / "packages"
+        for child in list(packages.iterdir()):
+            if child.name in {".gitkeep", "triage"}:
+                continue
+            if child.is_dir():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+        self.assert_blocked(repo, base, repo.commit("keep one release"))
+
+    def test_removing_a_different_snapshot_fails(self) -> None:
+        repo = Repo(self)
+        snapshot = baseline_snapshot(self)
+        altered = {path: data for path, data in snapshot.items() if not path.startswith("packages/review/")}
+        repo.write_tree(altered)
+        base = repo.commit("different snapshot")
+        self.clear_catalog(repo)
+        self.assert_blocked(repo, base, repo.commit("remove other snapshot"))
+
+    def test_modified_base_before_full_removal_fails(self) -> None:
+        payload = "packages/review/v1/agents/review/v1.md"
+        cases = {
+            "bytes": lambda snapshot: {**snapshot, payload: b"changed\n"},
+            "path": lambda snapshot: {
+                **{path: data for path, data in snapshot.items() if path != payload},
+                "packages/review/v1/agents/review/moved.md": snapshot[payload],
+            },
+        }
+        for name, mutate in cases.items():
+            with self.subTest(name=name):
+                repo = Repo(self)
+                repo.write_tree(mutate(baseline_snapshot(self)))
+                base = repo.commit("modified base")
+                self.clear_catalog(repo)
+                self.assert_blocked(repo, base, repo.commit("remove modified base"))
+
+        repo = Repo(self)
+        repo.write_tree(baseline_snapshot(self))
+        os.chmod(Path(repo.path) / "packages" / "review" / "v1" / "agents" / "review" / "v1.md", 0o755)
+        base = repo.commit("executable base")
+        self.clear_catalog(repo)
+        self.assert_blocked(repo, base, repo.commit("remove executable base"), "published file deleted")
+
+    def test_removal_combined_with_a_new_release_fails(self) -> None:
+        repo, base = self.snapshot_repo()
+        self.clear_catalog(repo)
+        repo.write_tree(belt_package("fresh-belt"))
+        self.assert_blocked(repo, base, repo.commit("clear and publish"))
+
+    def test_replaced_gitkeep_fails(self) -> None:
+        def replace_with_symlink(repo: Repo) -> None:
+            path = Path(repo.path) / "packages" / ".gitkeep"
+            path.unlink()
+            path.symlink_to("missing-target")
+
+        def replace_with_executable(repo: Repo) -> None:
+            os.chmod(Path(repo.path) / "packages" / ".gitkeep", 0o755)
+
+        def replace_with_content(repo: Repo) -> None:
+            repo.write("packages/.gitkeep", b"x")
+
+        cases = {
+            "symlink": replace_with_symlink,
+            "executable": replace_with_executable,
+            "nonempty": replace_with_content,
+        }
+        for name, replace in cases.items():
+            with self.subTest(name=name):
+                repo, base = self.snapshot_repo()
+                self.clear_catalog(repo)
+                replace(repo)
+                head = repo.commit(f"replaced gitkeep ({name})")
+                result = run_check(repo, base, head)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("published file deleted", result.stdout)
+                if name == "symlink":
+                    self.assertIn("symlink", result.stdout)
+
+
+class PublishAfterResetTests(unittest.TestCase):
+    """Publishing from the cleared catalog keeps the normal safeguards."""
+
+    def empty_repo(self) -> tuple[Repo, str]:
+        repo = Repo(self)
+        repo.write("packages/.gitkeep", b"")
+        return repo, repo.commit("empty catalog")
+
+    def test_v1_then_v2_from_the_empty_catalog_pass(self) -> None:
+        repo, base = self.empty_repo()
+        repo.write_tree(belt_package("fresh-belt"))
+        v1 = repo.commit("v1")
+        first = run_check(repo, base, v1)
+        self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+        repo.write_tree(belt_package("fresh-belt", 2))
+        v2 = repo.commit("v2")
+        second = run_check(repo, v1, v2)
+        self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+
+    def test_first_version_must_be_v1(self) -> None:
+        repo, base = self.empty_repo()
+        repo.write_tree(belt_package("fresh-belt", 2))
+        result = run_check(repo, base, repo.commit("v2 first"))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("next version must be v1", result.stdout)
+
+    def test_skipping_a_version_fails(self) -> None:
+        repo, base = self.empty_repo()
+        repo.write_tree(belt_package("fresh-belt", 1))
+        v1 = repo.commit("v1")
+        repo.write_tree(belt_package("fresh-belt", 3))
+        result = run_check(repo, v1, repo.commit("v3"))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("next version must be v2", result.stdout)
+
+    def test_changing_kind_fails(self) -> None:
+        repo, base = self.empty_repo()
+        repo.write_tree(belt_package("fresh-belt", 1))
+        v1 = repo.commit("v1")
+        repo.write_tree(agent_package("fresh-belt", 2))
+        result = run_check(repo, v1, repo.commit("v2 agent"))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("kind must stay belt", result.stdout)
+
+    def test_mutating_published_v1_fails(self) -> None:
+        repo, base = self.empty_repo()
+        repo.write_tree(belt_package("fresh-belt", 1))
+        v1 = repo.commit("v1")
+        files = belt_package("fresh-belt")
+        replace_json(files, "package.json", lambda obj: obj.__setitem__("summary", "Edited summary."))
+        repo.write_tree(files)
+        result = run_check(repo, v1, repo.commit("edit v1"))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("published file changed", result.stdout)
+
+    def test_invalid_layout_from_the_empty_catalog_fails(self) -> None:
+        repo, base = self.empty_repo()
+        files = belt_package("fresh-belt")
+        files["packages/fresh-belt/v1/agents/extra/v1.md"] = agent_markdown("extra", 1)
+        repo.write_tree(files)
+        result = run_check(repo, base, repo.commit("unpinned agent"))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("not pinned by the belt", result.stdout)
+
+
 def load_fixture(name: str) -> dict[str, bytes]:
     root = ROOT / "tests" / "fixtures" / name
     files = {}
@@ -1051,6 +1399,22 @@ def run_check(repo: Repo, base: str, head: str = "HEAD") -> subprocess.Completed
         capture_output=True,
         text=True,
     )
+
+
+def baseline_snapshot(test: unittest.TestCase) -> dict[str, bytes]:
+    """Load the reviewed issue #29 catalog from this repository's history."""
+    probe = subprocess.run(
+        ["git", "-C", str(ROOT), "cat-file", "-e", f"{BASELINE_COMMIT}^{{commit}}"],
+        capture_output=True,
+    )
+    if probe.returncode != 0:
+        test.skipTest("baseline catalog commit is not available in this checkout")
+    loaded = check_packages.load_tree(ROOT, BASELINE_COMMIT)
+    return {
+        path: entry.content
+        for path, entry in loaded.items()
+        if path.startswith("packages/") and entry.content is not None
+    }
 
 
 if __name__ == "__main__":

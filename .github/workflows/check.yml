@@ -1,0 +1,34 @@
+# Checks the belts and agents on every pull request and push to main. It reads
+# files and git history only: it never runs what a contribution contains, and it
+# uses the default read-only token with no secrets.
+name: check
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Test the check
+        run: python3 -m unittest discover -s tests -v
+      - name: Check the library
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            python3 scripts/check.py --base "origin/${{ github.base_ref }}"
+          else
+            python3 scripts/check.py
+          fi

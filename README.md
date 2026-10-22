@@ -1,172 +1,37 @@
 # Beltline marketplace
 
-This repository is the public marketplace for sharing Beltline factories, belts and agents. In Beltline, Market lets you browse packages, preview a release and import it. Search covers package name, summary, author and tags; filters show All, Factory, Belt or Agent packages, and Refresh updates the catalog. Select a package to choose a release and inspect its README, belt machines, factory floor, agent briefs and outcomes, plus any warnings, blocking problems and import effects. Each package you already have is marked Installed v<n>, and each package with a newer release is marked Update v<n>. An Updates filter narrows the list to those updates and shows how many there are. Browsing and previewing do not change your library.
+Belts and agents for [Beltline](https://github.com/robbertmanders/beltline), shared in the open. Add this repository to Beltline, install what you need, and share your own back as a pull request.
 
-Importing a factory package replaces the belts and agents in your library, and updating a factory package does the same: runs and settings remain, and unexported library changes are lost. Importing a belt or agent package keeps existing library items and adds the package beside them, reusing matching agent versions. The preview shows any belt, agent identity or key adjustments. Imported belts are paused, have no repositories, an empty base branch and AFK off. You confirm the import after reviewing its effects. Model warnings alone do not prevent import; blocking problems do. If the library or model allowances change after review, Beltline shows updated effects and asks you to review and confirm again. **Import as a new copy** adds a second copy beside what you have instead of updating what you installed.
+## Use it
 
-**Update to v<n>** saves the package's agents as new versions of the agents you installed and the belt as its next version. Repositories, base branch, AFK and paused state stay. Earlier versions stay, and runs keep the versions they started with.
+1. In Beltline, open **Settings → Library repositories** and add `robbertmanders/beltline-marketplace` as a **Shared** repository, published by **Pull request**. Leave the path empty.
+2. Open **Library**. It lists every belt and agent here, with what you have installed and what has an update.
+3. **Install** a belt. Beltline also installs the agent versions it uses, so it is ready to run.
+4. Fill in what a shared belt leaves out: the repositories its trigger watches and its base branch. Then allow the models its agents use under **Settings → Allowed models**, or pick ones you allow.
 
-Market uses `robbertmanders/beltline-marketplace` by default. The Marketplace repository is set in Settings as `owner/repository`. Leave empty to hide the Market list. This setting applies to browsing and proposals; it is separate from `factoryRepository`.
+An installed item remembers this repository as its origin. When a newer version is merged here, Library offers **Update**; the versions you had stay, and runs keep the versions they started with.
 
-Your own factory repository, and Settings → Factories, keep the archive format they already use. A personal factory backup lives under `factories/<id>/v<n>/` and still contains that setup's repositories and base branches. Marketplace packages live under `packages/<package>/v<n>/` and are prepared for someone else, as described below.
+Read Beltline's [security model](https://github.com/robbertmanders/beltline/blob/main/docs/security.md) before you run a belt from someone else. Agents run with their approval prompts turned off, as you, so read an agent's brief and a belt's stages before you install them.
 
-## Catalog reset
+## Share yours
 
-Issue [#29](https://github.com/robbertmanders/beltline-marketplace/issues/29) intentionally cleared the current catalog. Every factory, belt and agent published before the reset, including older releases and embedded definitions, was removed from the current catalog; `packages/` now holds only the empty placeholder `packages/.gitkeep`, so the removed packages are no longer available to browse, preview or newly import. The reset removed the current catalog only, and it did not delete Git history: old files remain in earlier commits and in open proposals, but they are not part of the current catalog. The reset did not touch anyone's library. Every previously imported local factory, belt and agent stays, together with its saved versions, runs and settings; clearing the catalog never modifies imported copies.
+On **Belts** or **Agents** in Beltline, choose **Share** on a saved version and pick this repository. Beltline opens a pull request with the item, plus the agent versions a belt uses. It leaves out what belongs to your setup: a belt's repositories, base branch, AFK mode and origin.
 
-The reset is a single reviewed exception. Outside it, published versions are immutable: a merged version keeps its files, and a change is always a new `packages/<package>/v<n>/` directory numbered one past the highest published version. The package check accepts removal of published versions only for the exact complete catalog snapshot that issue #29 cleared, down to `packages/.gitkeep`. Any other removal, including a partial removal of that snapshot or the complete removal of a different catalog, fails the check.
+Once the pull request is reviewed and merged, everyone who has this repository added sees it in Library. See [CONTRIBUTING.md](CONTRIBUTING.md) for the rules and for sharing by hand.
 
-## Manifest
+## Layout
 
-Every package version has a manifest at `packages/<package>/v<n>/package.json`. The same file is used for a factory, a belt and an agent.
-
-An optional `packages/<package>/v<n>/README.md` may sit beside it. The file is UTF-8 Markdown, is limited to 65,536 UTF-8 bytes (64 KB), and is shown in the preview.
-
-`package.json` has exactly these seven keys, and no others:
-
-- `schemaVersion`: the integer `1`
-- `id`: a string, the same as the `<package>` folder name
-- `name`: a non-empty display-name string
-- `kind`: a string, one of `factory`, `belt` or `agent`
-- `summary`: a one-line string
-- `author`: the publisher's GitHub login, as a string
-- `tags`: an array of free-word strings, which may be empty
-
-Unknown keys are refused. A `schemaVersion` other than `1` is refused. A `kind` other than `factory`, `belt` or `agent` is refused.
-
-A belt package:
-
-```json
-{
-  "schemaVersion": 1,
-  "id": "issue-flow",
-  "name": "Issue flow",
-  "kind": "belt",
-  "summary": "Triage an issue, build it and open a pull request.",
-  "author": "octocat",
-  "tags": ["issues", "build"]
-}
-```
-
-An agent package, with no tags:
-
-```json
-{
-  "schemaVersion": 1,
-  "id": "review",
-  "name": "Review",
-  "kind": "agent",
-  "summary": "Review a pull request and post the result.",
-  "author": "octocat",
-  "tags": []
-}
-```
-
-A factory package:
-
-```json
-{
-  "schemaVersion": 1,
-  "id": "team-setup",
-  "name": "Team setup",
-  "kind": "factory",
-  "summary": "The belts and agents used for issue work.",
-  "author": "octocat",
-  "tags": ["team"]
-}
-```
-
-## Layouts
-
-`n` is the package version. `k` is the publisher's version of one belt or agent definition. The two numbers are independent. The optional README may be omitted from any of the trees below.
-
-A belt file, `belts/<id>/v<k>.json`, is a Beltline belt definition in JSON. An agent file, `agents/<id>/v<k>.md`, is Markdown: settings and outcomes in the frontmatter, and the brief as the body. When that frontmatter sets `id` or `version`, the value has to agree with the file's path.
-
-### Belt
-
-A belt package contains exactly one belt definition, `belts/<id>/v<k>.json`, and one `agents/<id>/v<k>.md` for every agent version that belt pins. Every agent file is pinned by that belt. It has no second belt, no `state.json`, no `factory.json`, and no other payload path.
+This repository is laid out like a Beltline library:
 
 ```text
-packages/issue-flow/v1/package.json
-packages/issue-flow/v1/README.md            optional
-packages/issue-flow/v1/belts/issues/v3.json
-packages/issue-flow/v1/agents/triage/v2.md
-packages/issue-flow/v1/agents/build/v1.md
+belts/<id>/v<n>.json   one version of a belt
+agents/<id>/v<n>.md    one version of an agent: settings and outcomes in the frontmatter, the brief as the body
 ```
 
-### Agent
+`<id>` is letters, digits, dashes and underscores, and `<n>` counts up from 1. Other files, such as this README, are ignored by Beltline.
 
-An agent package contains exactly one agent file, `agents/<id>/v<k>.md`. It contains no belts, no `state.json`, no `factory.json`, and no other payload path.
+A version never changes once it is merged: a change is the next version. The `check` workflow enforces this and checks that shared belts carry no repositories, base branch or origin.
 
-```text
-packages/review/v1/package.json
-packages/review/v1/README.md                 optional
-packages/review/v1/agents/review/v4.md
-```
+## License
 
-### Factory
-
-A factory package contains `factory.json`, every saved belt version, and every saved agent version. Every factory belt requires state.json with paused:true and a boolean archived. Agent state.json remains optional and may contain only a boolean archived. The archive contains at least one agent. Every pin in every belt version, including older versions, resolves to an agent file in the package: a belt that once pinned `agents/triage/v1.md` still needs that file when a later belt version pins `agents/triage/v2.md`.
-
-`state.json` and `factory.json` belong only in a factory package. Any other payload path is unsupported.
-
-```text
-packages/team-setup/v2/package.json
-packages/team-setup/v2/README.md             optional
-packages/team-setup/v2/factory.json
-packages/team-setup/v2/belts/issues/v1.json
-packages/team-setup/v2/belts/issues/v3.json
-packages/team-setup/v2/belts/issues/state.json
-packages/team-setup/v2/agents/triage/v1.md
-packages/team-setup/v2/agents/triage/v2.md
-packages/team-setup/v2/agents/build/v1.md
-packages/team-setup/v2/agents/triage/state.json
-packages/team-setup/v2/agents/build/state.json
-```
-
-`factory.json` has exactly `schemaVersion`, `id` and `name`. Its `schemaVersion` is the integer `1`. Its `id` is the factory archive's id, and its `name` is that factory's display name.
-
-```json
-{
-  "schemaVersion": 1,
-  "id": "team-setup",
-  "name": "Team setup"
-}
-```
-
-Every factory belt requires `belts/<id>/state.json` with `paused: true` and a boolean `archived`. An archived belt must still be paused. Agent `agents/<id>/state.json` remains optional and may contain only a boolean `archived`.
-
-## Identities and versions
-
-A package has four separate identities:
-
-- The package id is the `<package>` folder. Package ids share one namespace across factories, belts and agents, so the same id cannot be used for two kinds.
-- A belt id or an agent id is the `<id>` folder under `belts/` or `agents/`. Those ids are not package ids.
-- The package version is `n` in `packages/<package>/v<n>/`.
-- The definition version is `k` in `belts/<id>/v<k>.json` or `agents/<id>/v<k>.md`.
-
-In `packages/example/v2/agents/review/v7.md` the package id is `example`, the package version is 2, the agent id is `review` and the agent version is 7. Changing the agent from version 7 to version 8 does not by itself publish a new package version.
-
-The app makes a package id from the package name: lowercase ASCII letters, digits and dashes (`-`). Characters other than ASCII letters and digits collapse to a single dash between the remaining parts, dashes at either end are dropped, and a name with no ASCII letter or digit produces no id. `Issue flow` becomes `issue-flow`.
-
-A hand-written id may use ASCII letters of either case, digits, hyphens and underscores. An id cannot be empty, `.` or `..`. Every payload path is a safe regular file: no symlink, and no path that traverses with `.` or `..`.
-
-Version numbers are positive integers (`v1`, `v2`, and so on). A belt definition's id and version agree with its path. An agent file's identity frontmatter cannot contradict its path. Package versions do not have to match definition versions.
-
-A merged package version is immutable. Its files stay as they were merged, so a merged `v2` is never edited. Publish a change as a new directory numbered one past the highest version that package already has, keeping the same package id and kind. When `v2` is the highest, the change is `v3`. When the published versions are `v1` and `v4`, the change is `v5`. The one exception is the [catalog reset](#catalog-reset) in issue #29, which cleared the complete catalog reviewed at that time; the package check recognizes that exact snapshot, and every other removal still fails.
-
-## What a shared package keeps
-
-Every shared belt version, including every belt version inside a factory, is stored with:
-
-- `repos` = `[]`
-- `base` = `""`
-- `afkEnabled` = `false`
-
-Imported belts arrive paused, so the recipient can set repositories before enabling the belt. In a factory package every belt's `state.json` sets `paused` to `true` and includes a boolean `archived`. An archived belt must still be paused. Agent `state.json` remains optional and may contain only a boolean `archived`.
-
-The package keeps triggers and their filters, policies, stages, forks, briefs and model choices.
-
-The package never includes runs, sessions, checkouts, settings, credentials, local model allowances, schedule firing history or the factory origin.
-
-Clearing `repos`, `base` and `afkEnabled` does not sanitize free text. Briefs and filters can still contain a secret, a token, a private repository name or a personal path. A person has to read that text before the package is published. [CONTRIBUTING.md](CONTRIBUTING.md) is the checklist for that review.
+Everything here is shared under the [Apache License 2.0](LICENSE), the same license as Beltline.
